@@ -2,15 +2,122 @@ import React, { useState, useEffect, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View, Animated, PanResponder, Dimensions, Image, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Keyboard, TouchableWithoutFeedback, SafeAreaView, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import axios from 'axios';  // Import axios for making HTTP requests
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import documentContent from './assets/document'; 
+
+const apiKeys = [
+  'AIzaSyCLfdfN3ZVwIznQ8Xd_d2Zl7FqY5rQF2Dk',  // jazcasing@gmail.com
+  'AIzaSyA2YTaP7eoxQZGz4FZP1xs31sxTYwOM8lA',  // sparkyahjussi@gmail.com 
+  'AIzaSyBYJ37ILiTYxFCi6KFOS6MQ0-Ym33aYhhA',  // iimsleeepy@gmail.com 
+  'AIzaSyDquh6PNhwQ72d5jmjVbxwOf3NhfoMYxt0',  // ahjusstine@gmail.com 
+  'AIzaSyAHPpQ8EiGCOnLedv7r-_6ggASFZs0BjMg',  // justingting55@gmail.com 
+  'AIzaSyDpjbCUO39hxNHKZYb5sNRZpWO6HZDczQo',  // cryingmistaaaa@gmail.com 
+];
+
+let counter = 1;
+
+const getCurrentAPIKey = () => {
+  const currentKey = apiKeys[counter - 1];
+  counter = counter >= apiKeys.length ? 1 : counter + 1;
+  return currentKey;
+};
 
 export default function App() {
   const [isVisible, setIsVisible] = useState(true);
-  const [botMessage, setBotMessage] = useState('');
-  const [userMessage, setUserMessage] = useState('');  // State for user input
-  const [messages, setMessages] = useState([]);  // State for storing messages
+  const [userMessage, setUserMessage] = useState('');
+  const [messages, setMessages] = useState([]);
+  const [docContent, setDocContent] = useState(documentContent);
+  const [isTyping, setIsTyping] = useState(false); 
+  const [typingDots, setTypingDots] = useState(''); 
   const translateY = useRef(new Animated.Value(0)).current;
   const bounceValue = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef(null);
+  const [inquiryTimestamps, setInquiryTimestamps] = useState([]);
+
+  useEffect(() => {
+    translateY.setValue(0);
+    Animated.loop(
+      Animated.sequence([
+        Animated.spring(bounceValue, {
+          toValue: -10,
+          friction: 1,
+          useNativeDriver: true,
+        }),
+        Animated.spring(bounceValue, {
+          toValue: 0,
+          friction: 1,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, []);
+
+  useEffect(() => {
+    if (isTyping) {
+      const intervalId = setInterval(() => {
+        setTypingDots((prevDots) => (prevDots.length === 3 ? '' : prevDots + '.'));
+      }, 500); 
+
+      return () => clearInterval(intervalId); 
+    }
+  }, [isTyping]);
+
+  const sendMessage = async (messageText) => {
+    const rule = "From now on, always base your answers on the document that was sent to you. Remove all the '*' from your responses (Bold text). Paste your answer in plain text; if you use bullet points, use dashes '-'. If you want it in Bold, just paste it as plain text";
+    const combinedMessage = `${docContent}\n\n${rule}\n\nUser: ${messageText}`;
+  
+    try {
+      const apiKey = getCurrentAPIKey();  
+      const genAI = new GoogleGenerativeAI(apiKey); 
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const result = await model.generateContent(combinedMessage);
+      return result.response.text();
+    } catch (error) {
+      console.error('Error sending message:', error);
+      return 'Sorry, something went wrong.';
+    }
+  };
+
+  const handleSend = async () => {
+    if (userMessage.trim() === '') return;
+  
+    const currentTime = Date.now();
+  
+    // Filter timestamps to only include those within the last minute (60,000 ms)
+    const recentInquiries = inquiryTimestamps.filter(timestamp => currentTime - timestamp < 60000);
+  
+    if (recentInquiries.length >= 10) {
+      const newBotMessage = { text: "Slow down with your inquiries klasmeyt", isUser: false };
+      setMessages((prevMessages) => [...prevMessages, newBotMessage]);
+      return;
+    }
+  
+    // Add the current timestamp to the inquiryTimestamps
+    setInquiryTimestamps([...recentInquiries, currentTime]);
+  
+    const newUserMessage = { text: userMessage, isUser: true };
+    setMessages((prevMessages) => [...prevMessages, newUserMessage]);
+    setUserMessage('');
+  
+    setIsTyping(true);
+  
+    try {
+      const botResponse = await sendMessage(userMessage);
+      const newBotMessage = { text: botResponse, isUser: false };
+      setMessages((prevMessages) => [...prevMessages, newBotMessage]);
+    } catch (error) {
+      console.error("There was an error fetching the data:", error);
+    } finally {
+      setIsTyping(false);
+    }
+  
+    Keyboard.dismiss();
+  
+    setTimeout(() => {
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 100);
+  };
+  
 
   const panResponder = useRef(
     PanResponder.create({
@@ -40,50 +147,6 @@ export default function App() {
     })
   ).current;
 
-  useEffect(() => {
-    translateY.setValue(0);
-
-    // Bouncing animation
-    Animated.loop(
-      Animated.sequence([
-        Animated.spring(bounceValue, {
-          toValue: -10,
-          friction: 1,
-          useNativeDriver: true,
-        }),
-        Animated.spring(bounceValue, {
-          toValue: 0,
-          friction: 1,
-          useNativeDriver: true,
-        }),
-      ])
-    ).start();
-  }, []);
-
-  const handleSend = async () => {
-    if (userMessage.trim() === '') return;
-
-    // Display the user's message
-    setMessages([...messages, { text: userMessage, isUser: true }]);
-
-    try {
-      const response = await axios.post('http://192.168.1.9:5000/get_text', {
-        message: userMessage,
-      });
-      setBotMessage(response.data.botResponse);
-
-      // Display the bot's response
-      setMessages([...messages, { text: userMessage, isUser: true }, { text: response.data.botResponse, isUser: false }]);
-
-    } catch (error) {
-      console.error("There was an error fetching the data:", error);
-    }
-
-    // Clear the input and dismiss the keyboard
-    setUserMessage('');
-    Keyboard.dismiss();
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -107,32 +170,42 @@ export default function App() {
         </Animated.View>
       )}
 
-      <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View>
             <View style={styles.content}>
               <View style={styles.messageContainerLeft}>
-                  <Image source={require('./assets/adamsonlogo.png')} style={styles.chatImage} />
-                  <View style={styles.botContainer}>
-                    <Text style={styles.chatTextbot}>Hello Klasmeyt!</Text>
+                <Image source={require('./assets/adamsonlogo.png')} style={styles.chatImage} />
+                <View style={styles.botContainer}>
+                  <Text style={styles.chatTextbot}>Hello Klasmeyt!</Text>
+                </View>
+              </View>
+
+              {messages.map((message, index) => (
+                <View
+                  key={index}
+                  style={message.isUser ? styles.messageContainerRight : styles.messageContainerLeft}
+                >
+                  {!message.isUser && (
+                    <Image source={require('./assets/adamsonlogo.png')} style={styles.chatImage} />
+                  )}
+                  <View style={message.isUser ? styles.userContainer : styles.botContainer}>
+                    <Text style={message.isUser ? styles.chatTextuser : styles.chatTextbot}>
+                      {message.text}
+                    </Text>
                   </View>
                 </View>
+              ))}
 
-                {messages.map((message, index) => (
-                  <View
-                    key={index}
-                    style={message.isUser ? styles.messageContainerRight : styles.messageContainerLeft}
-                  >
-                    {!message.isUser && (
-                      <Image source={require('./assets/adamsonlogo.png')} style={styles.chatImage} />
-                    )}
-                    <View style={message.isUser ? styles.userContainer : styles.botContainer}>
-                      <Text style={message.isUser ? styles.chatTextuser : styles.chatTextbot}>
-                        {message.text}
-                      </Text>
-                    </View>
+              {isTyping && (
+                <View style={styles.messageContainerLeft}>
+                  <Image source={require('./assets/adamsonlogo.png')} style={styles.chatImage} />
+                  <View style={styles.botContainer}>
+                    <Text style={styles.typingText}>Typing{typingDots}</Text> 
                   </View>
-                ))}
+                </View>
+              )}
+
             </View>
           </View>
         </TouchableWithoutFeedback>
@@ -144,10 +217,11 @@ export default function App() {
       >
         <View style={styles.inputContainer}>
           <TextInput
-            style={styles.textInput}
-            placeholder="Type here..."
+            style={[styles.textInput, isTyping && styles.disabledTextInput]}
+            placeholder={isTyping ? "Please wait..." : "Type here..."}
             value={userMessage}
             onChangeText={setUserMessage}
+            editable={!isTyping}  // Disable input when isTyping is true
           />
           <TouchableOpacity style={styles.iconContainer} onPress={handleSend}>
             <Ionicons name="send" size={24} color="black" />
@@ -160,6 +234,7 @@ export default function App() {
   );
 }
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -169,7 +244,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     padding: 20,
     alignItems: 'center',
-    zIndex: 0, // Ensure it is behind the swipeUpContainer
+    zIndex: 0, 
     alignItems: 'left',
   },
   headerText: {
@@ -186,8 +261,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#f1f1f1',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 1, // Ensures it appears above other content
-    paddingBottom: 50, // Space for the swipe info
+    zIndex: 1,
+    paddingBottom: 50, 
   },
   image: {
     width: 150,
@@ -197,8 +272,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#264577', // Adamson Color
+    color: '#264577',
     textAlign: 'center',
+  },
+  typingText: {
+    color: '#f2f2f2',
+    fontStyle: 'italic',
+    fontSize: 16,
   },
   swipeInfo: {
     position: 'absolute',
@@ -212,14 +292,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   keyboardAvoidingContainer: {
-    justifyContent: 'flex-end', // Ensures input container stays at the bottom
+    justifyContent: 'flex-end', 
   },
   content: {
     flex: 1,
   },
   chatContainer: {
     flex: 1,
-    justifyContent: 'flex-end', // Ensure chat messages are above the input container
+    justifyContent: 'flex-end', 
   },
   messageContainerLeft: {
     flexDirection: 'row',
@@ -280,5 +360,8 @@ const styles = StyleSheet.create({
   iconContainer: {
     marginLeft: 10,
   },
+  disabledTextInput: {
+    backgroundColor: '#e0e0e0',  // Optional: change the color to indicate it's disabled
+  },
+  
 });
-

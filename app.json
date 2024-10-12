@@ -1,27 +1,37 @@
 {
   "expo": {
-    "name": "chatbot",
+    "name": "FalconBot",
     "slug": "chatbot",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/adamsonlogo.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/adamsonlogo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.sleeepy.chatbot", 
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adamsonlogo.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "package": "com.sleeepy.chatbot"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/adamsonlogo.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "115462f4-536f-4687-b38f-839a812afe31"
+      }
+    },
+    "plugins": [
+      "expo-asset"
+    ]
   }
 }
